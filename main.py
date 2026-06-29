@@ -39,13 +39,24 @@ options = HandLandmarkerOptions(
 )
 
 
-def is_hand_raised(hand_landmarks):
+def is_finger_up(landmarks, tip_idx, pip_idx):
+    """Jari dianggap berdiri jika ujung jari lebih tinggi dari sendi PIP."""
+    return landmarks[tip_idx].y < landmarks[pip_idx].y
+
+
+def is_metal_gesture(hand_landmarks):
     """
-    Tangan dianggap NAIK jika wrist (titik 0) berada di 65% bagian atas frame.
-    Koordinat y dinormalisasi: 0 = atas layar, 1 = bawah layar.
+    Gesture METAL 🤘:
+    - Telunjuk (8) berdiri
+    - Kelingking (20) berdiri
+    - Jari tengah (12) ditekuk
+    - Jari manis (16) ditekuk
     """
-    wrist = hand_landmarks[0]
-    return wrist.y < 0.65
+    index_up  = is_finger_up(hand_landmarks, 8, 6)
+    pinky_up  = is_finger_up(hand_landmarks, 20, 18)
+    middle_down = not is_finger_up(hand_landmarks, 12, 10)
+    ring_down   = not is_finger_up(hand_landmarks, 16, 14)
+    return index_up and pinky_up and middle_down and ring_down
 
 
 def main():
@@ -76,8 +87,8 @@ def main():
     else:
         cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
         print("=" * 50)
-        print("  Angkat KEDUA tangan  ->  layar BLUR")
-        print("  Turunkan tangan      ->  layar NORMAL")
+        print("  Gesture METAL 🤘     ->  layar BLUR")
+        print("  Gesture lain/normal  ->  layar NORMAL")
         print("  Tekan 'q' untuk keluar")
         print("=" * 50)
 
@@ -110,12 +121,12 @@ def main():
             with result_lock:
                 result = latest_result
 
-            # Kedua tangan terdeteksi DAN keduanya dalam posisi naik
+            # Minimal satu tangan melakukan gesture METAL 🤘
             both_raised = (
                 result is not None
                 and result.hand_landmarks is not None
-                and len(result.hand_landmarks) >= 2
-                and all(is_hand_raised(h) for h in result.hand_landmarks)
+                and len(result.hand_landmarks) >= 1
+                and any(is_metal_gesture(h) for h in result.hand_landmarks)
             )
 
             # Smoothing: hindari blur kedip-kedip
@@ -136,7 +147,7 @@ def main():
             status_color = (0, 0, 255) if blur_active else (0, 255, 0)
             cv2.putText(
                 display_frame,
-                f"Tangan: {hand_count}/2  |  {status_text}",
+                f"Tangan: {hand_count}  |  {status_text}",
                 (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.8,
